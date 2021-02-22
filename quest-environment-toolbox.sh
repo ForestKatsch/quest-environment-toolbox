@@ -8,7 +8,7 @@ log_err() { echo "\033[0;31m! $@\033[0m" 1>&2; }
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-TMP_PREFIX="/tmp/oculus-quest-environment-toolbox"
+TMP_PREFIX="/tmp/quest-environment-toolbox"
 
 verify_adb() {
     log_info "verifying device presence..."

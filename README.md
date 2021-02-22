@@ -1,5 +1,5 @@
 
-# Oculus Environment Toolbox
+# Quest Environment Toolbox
 
 **USE AT YOUR OWN RISK.
 THIS SCRIPT MIGHT DELETE DATA OR PERFORM OTHER IRREPARABLE HARM.
@@ -17,7 +17,7 @@ Tools to extract, modify, repack, and install custom Oculus Quest environments.
 * Install `adb`
 * Install `apktool`
 * Set `ANDROID_SDK_BUILD_TOOLS` to the build tools directory containing `zipalign`.
-* (Optional) install `astcenc` from https://github.com/ARM-software/astc-encoder/releases and add it to your path. Oculus Environment Toolbox will automatically discover this and (hackily) rewrite jpg/png files to KTX.
+* (Optional) install `astcenc` from https://github.com/ARM-software/astc-encoder/releases and add it to your path. Quest Environment Toolbox will automatically discover this and (hackily) rewrite jpg/png files to KTX.
 
 Example:
 
@@ -29,17 +29,17 @@ export ANDROID_SDK_BUILD_TOOLS=/opt/homebrew/Caskroom/android-sdk/4333796/build-
 
 ```sh
 $ # Automatically pulls and unpacks existing environments with apktool. (Quest must be plugged in.)
-$ oculus-environment-toolbox unpack
+$ quest-environment-toolbox unpack
 ...
 $ # This doesn't need the Quest to be plugged in.
 $ # To pack the scene, replacing the `com.oculus.environment.prod.rifthome` environment:
-$ oculus-environment-toolbox pack com.oculus.environment.prod.rifthome export/scene.gltf
+$ quest-environment-toolbox pack com.oculus.environment.prod.rifthome export/scene.gltf
 ...
 $ # Uninstall the default environment. (Very important!)
-$ oculus-environment-toolbox remove com.oculus.environment.prod.rifthome 
+$ quest-environment-toolbox remove com.oculus.environment.prod.rifthome 
 ...
 $ # Install the modified environment.
-$ oculus-environment-toolbox install com.oculus.environment.prod.rifthome-custom.apk
+$ quest-environment-toolbox install com.oculus.environment.prod.rifthome-custom.apk
 ...
 $ Done!
 ```
