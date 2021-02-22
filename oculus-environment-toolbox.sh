@@ -104,7 +104,7 @@ cmd_pull_all() {
     for i in $(get_installed_environment_list); do
         if environment_is_original $i
         then
-            log_info "skipping $i: not original environment"
+            log_info "skipping modified environment $i"
         fi
         
         echo "$i"
@@ -291,7 +291,7 @@ pack_single() {
     
     apktool b "$APK_TMP_DIR" -o "$PACKED_APK_UNALIGNED"
     
-    PACKED_APK="$PACKAGE_PARENT.packed.apk"
+    PACKED_APK="$PACKAGE_PARENT-custom.apk"
 
     DEBUG_KEYSTORE=~/debug.keystore
 
