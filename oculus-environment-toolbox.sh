@@ -27,6 +27,30 @@ verify_adb() {
     fi
 }
 
+ASTCENC="astcenc-neon astcenc-avx2 astcenc-sse4.1 astcenc-sse2"
+
+# Returns 1 if astcenc isn't available.
+has_astcenc() {
+    for i in $ASTCENC; do
+        if command -v $i &> /dev/null
+        then
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
+astcenc() {
+    for i in $ASTCENC; do
+        if command -v $i &> /dev/null
+        then
+            echo $i
+            return
+        fi
+    done
+}
+
 ensure_directory() {
     
     if [ -z "$1" ]
@@ -36,6 +60,10 @@ ensure_directory() {
     fi
 
     test -d "$1" || mkdir -p "$1"
+}
+
+clear_directory() {
+    ensure_directory "$1"
     rm -rf "$1"/*
 }
 
@@ -55,6 +83,8 @@ get_installed_environment_list() {
 }
 
 get_cached_environment_list() {
+    ensure_apk_cache_path
+    
     ls -p "$APK_CACHE_PATH" | grep -v / | sed 's/.apk//g'
 }
 
@@ -62,7 +92,7 @@ get_cached_environment_list() {
 APK_CACHE_PATH=$DIR/apk_original
 
 ensure_apk_cache_path() {
-    mkdir -p $APK_CACHE_PATH
+    ensure_directory "$APK_CACHE_PATH"
 }
 
 #log_info $ENVIRONMENT_PACKAGE_LIST
@@ -94,7 +124,15 @@ environment_is_original() {
 }
 
 cmd_pull_package() {
-    log_err "niy"
+    if environment_is_original $1
+    then
+        log_info "skipping modified environment '$1'"
+    fi
+    
+    echo "$1"
+    
+    adb pull "$(adb shell pm path $1 | awk -F':' '{print $2}')" > /dev/null;
+    mv base.apk "$APK_CACHE_PATH/$1.apk";
 }
 
 # Pulls all installed environments.
@@ -102,15 +140,7 @@ cmd_pull_all() {
     log_info "copying environment apks to '$APK_CACHE_PATH/'"
     
     for i in $(get_installed_environment_list); do
-        if environment_is_original $i
-        then
-            log_info "skipping modified environment $i"
-        fi
-        
-        echo "$i"
-        
-        adb pull "$(adb shell pm path $i | awk -F':' '{print $2}')" > /dev/null;
-        mv base.apk "$APK_CACHE_PATH/$i.apk";
+        cmd_pull_package "$i"
     done
 
     log_info "done." 
@@ -118,14 +148,13 @@ cmd_pull_all() {
 
 cmd_pull() {
     verify_adb
-    get_installed_environment_list
     ensure_apk_cache_path
 
     if [ -z "$1" ]
     then
         cmd_pull_all
     else
-        cmd_pull_package $2
+        cmd_pull_package "$1"
     fi
 
 }
@@ -160,6 +189,11 @@ cmd_unpack() {
 
         exit 0
     fi
+
+    log_info "preparing to unpack $1..."
+
+    # Pull if necessary.
+    [ -d "$APK_CACHE_PATH/$1.apk" ] || cmd_pull "$1"
     
     APK_FILENAME="$APK_CACHE_PATH/$1.apk"
     
@@ -172,7 +206,7 @@ cmd_unpack() {
 
     log_info "unpacking '$APK_FILENAME'..."
 
-    ensure_directory $UNPACK_DIR
+    clear_directory $UNPACK_DIR
 
     apktool d "$APK_FILENAME" -f -o "$UNPACK_DIR"
     
@@ -182,8 +216,8 @@ cmd_unpack() {
 extract_audio_filename() {
     TMP_DIR="$TMP_PREFIX/audio"
     
-    ensure_directory "$TMP_DIR"
-
+    clear_directory "$TMP_DIR"
+    
     pushd "$TMP_DIR" > /dev/null
 
     unzip "$APK_CACHE_PATH/$1/assets/scene.zip" > /dev/null
@@ -195,6 +229,24 @@ extract_audio_filename() {
 
 OVRSCENE_FILE="$TMP_PREFIX"/_WORLD_MODEL.gltf.ovrscene
 
+compress_ktx() {
+    GLTF_TMP_DIR="$1"
+    EXTENSION="$2"
+    MIME_TYPE="$3"
+
+    GLTF_FILENAME="$GLTF_TMP_DIR/models.gltf"
+
+    for i in $(ls "$GLTF_TMP_DIR/"*$EXTENSION 2> /dev/null); do
+        [ -f "$i" ] || break
+        log_info "converting '$i' to ktx..."
+        $(astcenc) -cl $i $(echo "$i" | sed "s/$EXTENSION//g").ktx 8x8 -medium > /dev/null
+        rm $i
+    done
+
+    sed -i '' "s|$MIME_TYPE|image/ktx|g" "$GLTF_FILENAME"
+    sed -i '' "s|$EXTENSION|.ktx|g" "$GLTF_FILENAME"
+}
+
 # Compresses the given GLTF file into $OVRSCENE_FILE
 compress_model() {
     SCENE_GLTF="$1"
@@ -202,7 +254,7 @@ compress_model() {
     GLTF_SRC_DIR=$(dirname "$SCENE_GLTF")
 
     GLTF_TMP_DIR="$TMP_PREFIX/_WORLD_MODEL.gltf"
-    ensure_directory $GLTF_TMP_DIR
+    clear_directory $GLTF_TMP_DIR
 
     cp -r "$GLTF_SRC_DIR"/* "$GLTF_TMP_DIR"
 
@@ -210,7 +262,14 @@ compress_model() {
 
     mv "$GLTF_TMP_DIR"/$(basename "$SCENE_GLTF") "$GLTF_TMP_DIR"/models.gltf
 
-    # TODO: ktx conversion
+    if [ $(astcenc) ]
+    then
+        log_info "compressing textures to ktx..."
+        compress_ktx "$GLTF_TMP_DIR" .jpg image/jpeg
+        compress_ktx "$GLTF_TMP_DIR" .jpeg image/jpeg
+        compress_ktx "$GLTF_TMP_DIR" .png image/png
+    fi
+    #TODO: ktx conversion
 
     log_info "compressing model..."
     
@@ -230,7 +289,7 @@ compress_scene() {
     pushd "$TMP_PREFIX" > /dev/null
     
     OVRSCENE_TMP_DIR="$TMP_PREFIX/scene"
-    ensure_directory $OVRSCENE_TMP_DIR
+    clear_directory $OVRSCENE_TMP_DIR
 
     mv _WORLD_MODEL.gltf.ovrscene "$OVRSCENE_TMP_DIR"
 
@@ -263,6 +322,9 @@ pack_single() {
     PACKAGE_PARENT="$1"
     SCENE_GLTF="$2"
     BACKGROUND_LOOP="$3"
+
+    # Unpack if necessary.
+    [ -d "$APK_CACHE_PATH/$PACKAGE_PARENT" ] || cmd_unpack "$1"
     
     if [ -z "$BACKGROUND_LOOP" ]
     then
@@ -271,7 +333,7 @@ pack_single() {
     fi
 
     APK_TMP_DIR="$TMP_PREFIX/apk"
-    ensure_directory "$APK_TMP_DIR"
+    clear_directory "$APK_TMP_DIR"
 
     APK_PARENT="$APK_CACHE_PATH/$PACKAGE_PARENT/"
 
@@ -416,4 +478,3 @@ case "$1" in
         cmd_usage
         ;;
 esac
-
